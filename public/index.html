@@ -1,0 +1,121 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#212121">
+<title>Minha IA</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#212121;color:#f5f5f5;height:100dvh;display:flex;flex-direction:column}
+header{height:58px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid #383838;font-size:19px;font-weight:bold}
+#layout{display:flex;flex:1;min-height:0}
+aside{width:245px;background:#171717;padding:12px;display:flex;flex-direction:column;gap:10px}
+button{cursor:pointer;border:1px solid #444;background:#292929;color:#eee;border-radius:10px;padding:11px;font-size:15px}
+#chats{overflow:auto;display:flex;flex-direction:column;gap:6px}
+.chat{display:flex;gap:5px;align-items:center}
+.chat button:first-child{flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+main{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center}
+#messages{width:min(800px,100%);flex:1;overflow:auto;padding:22px 16px}
+.msg{padding:14px 16px;margin:10px 0;border-radius:16px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+.user{background:#303030;margin-left:12%;border:1px solid #414141}
+.assistant{background:#262626;margin-right:5%}
+#welcome{margin-top:18vh;text-align:center;padding:10px}
+#composer{width:min(800px,100%);padding:12px 16px 8px}
+#form{display:flex;gap:8px;background:#303030;border:1px solid #555;border-radius:24px;padding:9px;align-items:flex-end}
+textarea{flex:1;resize:none;max-height:150px;min-width:0;border:0;outline:0;background:transparent;color:white;font:16px Arial;padding:9px}
+#send{background:#eee;color:#111;border:0;border-radius:50%;width:42px;height:42px;font-size:20px;padding:0}
+#hint{font-size:11px;color:#999;text-align:center;padding:8px}
+#status{color:#aaa;font-size:13px;padding:0 16px}
+@media(max-width:600px){aside{width:62px;padding:6px}aside .label{display:none}aside button{font-size:12px;padding:10px 3px}#chats .chat button:first-child{display:none}#chats .chat button:last-child{padding:6px}#messages{padding:12px 8px}#composer{padding:8px}}
+</style>
+</head>
+<body>
+<header>✳ Minha IA</header>
+<div id="layout">
+<aside>
+<button id="new">＋ <span class="label">Nova conversa</span></button>
+<div id="chats"></div>
+<button id="clear">🗑 <span class="label">Apagar histórico</span></button>
+</aside>
+<main>
+<div id="messages">
+<div id="welcome"><h2>Como posso ajudar?</h2><p>Converse com sua IA.</p></div>
+</div>
+<div id="status"></div>
+<div id="composer">
+<form id="form">
+<textarea id="prompt" rows="1" maxlength="8000" placeholder="Pergunte alguma coisa..." required></textarea>
+<button id="send" type="submit" aria-label="Enviar">↑</button>
+</form>
+<div id="hint">As conversas ficam salvas neste dispositivo.</div>
+</div>
+</main>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const KEY="minha-ia-chats-v1";
+let chats=[];
+let active=null;
+let busy=false;
+
+try{chats=JSON.parse(localStorage.getItem(KEY)||"[]");if(!Array.isArray(chats))chats=[];}catch{chats=[];}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(chats));}catch{status("Não foi possível salvar o histórico neste dispositivo.");}}
+function status(s){$("status").textContent=s||"";}
+function current(){return chats.find(c=>c.id===active);}
+function newChat(){
+ const c={id:Date.now().toString(),title:"Nova conversa",messages:[]};
+ chats.unshift(c);active=c.id;save();renderChats();renderMessages();$("prompt").focus();
+}
+function renderChats(){
+ $("chats").replaceChildren();
+ chats.forEach(c=>{
+  const row=document.createElement("div");row.className="chat";
+  const b=document.createElement("button");b.textContent=c.title;b.onclick=()=>{active=c.id;renderChats();renderMessages();};
+  const d=document.createElement("button");d.textContent="×";d.title="Apagar conversa";
+  d.onclick=()=>{if(!confirm("Apagar esta conversa?"))return;chats=chats.filter(x=>x.id!==c.id);if(active===c.id)active=chats[0]?.id||null;save();renderChats();renderMessages();};
+  row.append(b,d);$("chats").append(row);
+ });
+}
+function renderMessages(){
+ const box=$("messages");box.replaceChildren();
+ const c=current();
+ if(!c||!c.messages.length){const w=document.createElement("div");w.id="welcome";w.innerHTML="<h2>Como posso ajudar?</h2><p>Converse com sua IA.</p>";box.append(w);return;}
+ c.messages.forEach(m=>{
+  const el=document.createElement("div");el.className="msg "+m.role;el.textContent=m.content;box.append(el);
+ });
+ box.scrollTop=box.scrollHeight;
+}
+$("new").onclick=newChat;
+$("clear").onclick=()=>{if(confirm("Apagar todas as conversas salvas neste dispositivo?")){chats=[];active=null;save();renderChats();renderMessages();}};
+$("prompt").addEventListener("input",()=>{$("prompt").style.height="auto";$("prompt").style.height=Math.min($("prompt").scrollHeight,150)+"px";});
+$("form").addEventListener("submit",async e=>{
+ e.preventDefault();if(busy)return;
+ const text=$("prompt").value.trim();if(!text)return;
+ if(!active)newChat();
+ const c=current();if(!c)return;
+ c.messages.push({role:"user",content:text});
+ if(c.messages.length===1)c.title=text.slice(0,35);
+ $("prompt").value="";$("prompt").style.height="auto";busy=true;$("send").disabled=true;
+ save();renderChats();renderMessages();status("Pensando...");
+ try{
+  const history=c.messages.slice(-20);
+  const response=await fetch("/api/chat",{
+   method:"POST",headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({messages:history})
+  });
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.error||"Erro na comunicação com a IA.");
+  c.messages.push({role:"assistant",content:data.reply});
+  save();renderMessages();status("");
+ }catch(err){
+  c.messages.push({role:"assistant",content:"Não consegui responder: "+err.message});
+  save();renderMessages();status("Verifique sua conexão e a configuração do servidor.");
+ }finally{busy=false;$("send").disabled=false;$("prompt").focus();}
+});
+if(chats.length)active=chats[0].id;
+renderChats();renderMessages();
+</script>
+</body>
+</html>
